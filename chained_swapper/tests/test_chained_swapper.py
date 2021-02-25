@@ -47,6 +47,24 @@ class TestChainedSwapper(common.SavepointCase):
             }
         )
         cls.chained_swapper.add_action()
+        cls.chained_swapper_inherits = cls.env["chained.swapper"].create(
+            {
+                "name": "Product",
+                "model_id": cls.env.ref("product.model_product_product").id,
+                "field_id": cls.env.ref(
+                    "product.field_product_product__product_tmpl_id"
+                ).id,
+            }
+        )
+        cls.chained_swapper_text = cls.env["chained.swapper"].create(
+            {
+                "name": "Product",
+                "model_id": cls.env.ref("product.model_product_product").id,
+                "field_id": cls.env.ref(
+                    "product.field_product_product__description"
+                ).id,
+            }
+        )
 
     def test_create_unlink_action(self):
         """Test if Sidebar Action is added / removed to / from given object."""
@@ -94,6 +112,26 @@ class TestChainedSwapper(common.SavepointCase):
         self.assertEqual(self.partner_parent.lang, "es_ES")
         self.assertEqual(self.partner_child_1.lang, "es_ES")
         self.assertEqual(self.partner_child_2.lang, "es_ES")
+        chained_many2one = (
+            self.env["chained.swapper.wizard"]
+            .with_context(
+                active_model="product.product",
+                chained_swapper_id=self.chained_swapper_inherits.id,
+            )
+            .create({"product_tmpl_id": 1})
+        )
+        chained_many2one.fields_view_get()
+        self.assertEqual(self.chained_swapper_inherits.field_id.ttype, "many2one")
+        chained_text = (
+            self.env["chained.swapper.wizard"]
+            .with_context(
+                active_model="product.product",
+                chained_swapper_id=self.chained_swapper_text.id,
+            )
+            .create({"description": "product1"})
+        )
+        chained_text.fields_view_get()
+        self.assertEqual(self.chained_swapper_text.field_id.ttype, "text")
 
     def test_uninstall_hook(self):
         """Test if related actions are removed when mass editing
@@ -107,3 +145,40 @@ class TestChainedSwapper(common.SavepointCase):
             self.chained_swapper.constraint_ids.write(
                 {"expression": "Something incorrect"}
             )
+
+    def test_compute_allowed_field_ids(self):
+        field_obj = self.env["ir.model.fields"]
+        model_obj = self.env["ir.model"]
+        self.chained_swapper_inherits._compute_allowed_field_ids()
+        all_models = self.chained_swapper_inherits.model_id
+        active_model_obj = self.env[self.chained_swapper_inherits.model_id.model]
+        if active_model_obj._inherits:
+            keys = list(active_model_obj._inherits.keys())
+            all_models |= model_obj.search([("model", "in", keys)])
+        recs = field_obj.search(
+            [
+                ("ttype", "not in", ["reference", "function", "one2many"]),
+                ("model_id", "in", all_models.ids),
+            ]
+        )
+        self.assertTrue(recs)
+
+    def test_write(self):
+        rec = self.chained_swapper.ref_ir_act_window_id.id
+        rec_write = self.chained_swapper.write({"ref_ir_act_window_id": rec})
+        self.assertTrue(rec_write)
+
+    def test_check_sub_field_chain(self):
+        with self.assertRaises(exceptions.ValidationError):
+            self.chained_swapper.sub_field_ids.write(
+                {"sub_field_chain": "Sub-field incompatible"}
+            )
+
+    def test_validation_check_sub_field_chain(self):
+        with self.assertRaises(exceptions.ValidationError):
+            self.chained_swapper.sub_field_ids.chained_swapper_id.write({"field_id": 1})
+
+    def test_onchange_model_id(self):
+        self.chained_swapper_inherits._onchange_model_id()
+        self.chained_swapper_inherits.field_id = False
+        self.assertFalse(self.chained_swapper_inherits.field_id)
