@@ -7,6 +7,6 @@
     "license": "AGPL-3",
     "depends": ["base"],
     "website": "https://github.com/OCA/server-ux",
-    "data": ["views/multi_step_wizard_views.xml"],
+    "data": ["security/ir.model.access.csv", "views/multi_step_wizard_views.xml"],
     "installable": True,
 }
