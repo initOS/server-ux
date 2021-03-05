@@ -78,6 +78,10 @@ class TestDocumentQuickAccessClassification(TransactionCase):
         with open(os.path.join(self.tmpdir.name, "test_file_2.pdf"), "wb") as f:
             f.write(file)
         code = [Encoded(partner.get_quick_access_code().encode("utf-8"))]
+        with self.assertRaises(Exception):
+            self.env["document.quick.access.rule"].with_context(
+                no_raise_document_access=False
+            ).read_code(code)
         with patch(
             "odoo.addons.document_quick_access_folder_auto_classification."
             "models.ir_attachment.decode"
@@ -90,6 +94,8 @@ class TestDocumentQuickAccessClassification(TransactionCase):
         attachments = self.env["ir.attachment"].search(
             [("res_model", "=", partner._name), ("res_id", "=", partner.id)]
         )
+        search_document = attachments._search_document()
+        self.assertEqual(search_document, [])
         self.assertTrue(attachments)
         self.assertEqual(1, len(attachments))
         self.assertTrue(
@@ -161,6 +167,9 @@ class TestDocumentQuickAccessClassification(TransactionCase):
         self.env["document.quick.access.rule"].with_context(
             ignore_process_path=True
         ).cron_folder_auto_classification()
+        self.env["document.quick.access.rule"].with_context(
+            ignore_process_path=False
+        ).cron_folder_auto_classification(processing_path=False)
         self.assertTrue(
             os.path.exists(os.path.join(self.no_ok_tmpdir.name, "test_file.pdf"))
         )
